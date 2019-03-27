@@ -96,7 +96,7 @@ if __name__ == '__main__':
         transforms.Normalize(mean = RGB_MEAN,
                              std = RGB_STD),
     ])
-    val_transform = transfoms.Compose([
+    val_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean = RGB_MEAN,
                              std = RGB_STD),
@@ -168,6 +168,8 @@ if __name__ == '__main__':
     print("Optimizer Generated")
     print("=" * 60)
 
+    # load pretrained weights
+    BACKBONE.load_state_dict(torch.load(os.path.join(MODEL_ROOT, "backbone_ir50_asia.pth")))
     # optionally resume from a checkpoint
     if BACKBONE_RESUME_ROOT and HEAD_RESUME_ROOT:
         print("=" * 60)
@@ -177,7 +179,7 @@ if __name__ == '__main__':
             print("Loading Head Checkpoint '{}'".format(HEAD_RESUME_ROOT))
             HEAD.load_state_dict(torch.load(HEAD_RESUME_ROOT))
         else:
-            print("No Checkpoint Found at '{}' and '{}'. Please Have a Check or Continue to Train from Scratch".format(BACKBONE_RESUME_ROOT, HEAD_RESUME_ROOT))
+            print("No Checkpoint Found at '{}' and '{}'. Please Have a Check".format(BACKBONE_RESUME_ROOT, HEAD_RESUME_ROOT))
         print("=" * 60)
 
     if MULTI_GPU:
