@@ -106,21 +106,23 @@ class ArcFace(nn.Module):
                 temp_x = x.cuda(self.device_id[i])
                 weight = sub_weights[i].cuda(self.device_id[i])
                 cosine = torch.cat((cosine, F.linear(F.normalize(temp_x), F.normalize(weight)).cuda(self.device_id[0])), dim=1) 
-        sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
-        phi = cosine * self.cos_m - sine * self.sin_m
-        if self.easy_margin:
-            phi = torch.where(cosine > 0, phi, cosine)
-        else:
-            phi = torch.where(cosine > self.th, phi, cosine - self.mm)
-        # --------------------------- convert label to one-hot ---------------------------
-        one_hot = torch.zeros(cosine.size())
-        if self.device_id != None:
-            one_hot = one_hot.cuda(self.device_id[0])
-        one_hot.scatter_(1, label.view(-1, 1).long(), 1)
-        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
-        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
-        output *= self.s
-
+        if self.training:
+            sine = torch.sqrt(1.0 - torch.pow(cosine, 2))
+            phi = cosine * self.cos_m - sine * self.sin_m
+            if self.easy_margin:
+                phi = torch.where(cosine > 0, phi, cosine)
+            else:
+                phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+            # --------------------------- convert label to one-hot ---------------------------
+            one_hot = torch.zeros(cosine.size())
+            if self.device_id != None:
+                one_hot = one_hot.cuda(self.device_id[0])
+            one_hot.scatter_(1, label.view(-1, 1).long(), 1)
+            # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
+            output = (one_hot * phi) + ((1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
+            output *= self.s
+            return output
+        output = F.softmax(self.s * cosine, dim=1)
         return output
 
 
