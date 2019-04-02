@@ -36,11 +36,19 @@ configurations = {
     2: dict(
         SEED = 1337, # random seed for reproduce results
 
+<<<<<<< HEAD
         DATA_ROOT = 'datasets/vn_celeb_face_recognition/', # the parent root where your train/val/test data are stored
         MODEL_ROOT = 'model/', # the root to buffer your checkpoints
         LOG_ROOT = 'log/', # the root to log your train/val status
         BACKBONE_RESUME_ROOT = "model/backbone_ir50_ms1m_epoch120.pth" , # the root to resume training from a saved checkpoint
         HEAD_RESUME_ROOT = "model/head_ir50_ms1m_epoch120.pth" , # the root to resume training from a saved checkpoint
+=======
+        DATA_ROOT = 'datasets/vn_celeb_face_recognition/face_align/fold0/', # the parent root where your train/val/test data are stored
+        MODEL_ROOT = 'model/', # the root to buffer your checkpoints
+        LOG_ROOT = 'log/', # the root to log your train/val status
+        BACKBONE_RESUME_ROOT = None, # the root to resume training from a saved checkpoint
+        HEAD_RESUME_ROOT = None, # the root to resume training from a saved checkpoint
+>>>>>>> 447818a63c19e7a930e8fee00445bd903fbfd3ec
 
         BACKBONE_NAME = 'IR_50', # support: ['ResNet_50', 'ResNet_101', 'ResNet_152', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
         HEAD_NAME = 'ArcFace', # support:  ['Softmax', 'ArcFace', 'CosFace', 'SphereFace', 'Am_softmax']
