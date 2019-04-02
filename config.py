@@ -36,13 +36,13 @@ configurations = {
     2: dict(
         SEED = 1337, # random seed for reproduce results
 
-        DATA_ROOT = 'datasets/vn_celeb_face_recognition/fold0/', # the parent root where your train/val/test data are stored
+        DATA_ROOT = 'datasets/vn_celeb_face_recognition/', # the parent root where your train/val/test data are stored
         MODEL_ROOT = 'model/', # the root to buffer your checkpoints
         LOG_ROOT = 'log/', # the root to log your train/val status
-        BACKBONE_RESUME_ROOT = './', # the root to resume training from a saved checkpoint
-        HEAD_RESUME_ROOT = './', # the root to resume training from a saved checkpoint
+        BACKBONE_RESUME_ROOT = "model/backbone_ir50_ms1m_epoch120.pth" , # the root to resume training from a saved checkpoint
+        HEAD_RESUME_ROOT = "model/head_ir50_ms1m_epoch120.pth" , # the root to resume training from a saved checkpoint
 
-        BACKBONE_NAME = 'IR_SE_50', # support: ['ResNet_50', 'ResNet_101', 'ResNet_152', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
+        BACKBONE_NAME = 'IR_50', # support: ['ResNet_50', 'ResNet_101', 'ResNet_152', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
         HEAD_NAME = 'ArcFace', # support:  ['Softmax', 'ArcFace', 'CosFace', 'SphereFace', 'Am_softmax']
         LOSS_NAME = 'Focal', # support: ['Focal', 'Softmax']
 
@@ -53,10 +53,10 @@ configurations = {
         BATCH_SIZE = 128,
         DROP_LAST = True, # whether drop the last batch to ensure consistent batch_norm statistics
         LR = 0.025, # initial LR
-        NUM_EPOCH = 50, # total epoch number (use the firt 1/25 epochs to warm up)
+        NUM_EPOCH = 35, # total epoch number (use the firt 1/25 epochs to warm up)
         WEIGHT_DECAY = 5e-4, # do not apply to batch_norm parameters
         MOMENTUM = 0.9,
-        STAGES = [35, 65, 95], # epoch stages to decay learning rate
+        STAGES = [10, 20, 30], # epoch stages to decay learning rate
 
         DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
         MULTI_GPU = True, # flag to use multiple GPUs; if you choose to train with single GPU, you should first run "export CUDA_VISILE_DEVICES=device_id" to specify the GPU card you want to use
