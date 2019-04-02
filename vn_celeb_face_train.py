@@ -11,39 +11,76 @@ from head.metrics import ArcFace, CosFace, SphereFace, Am_softmax
 from loss.focal import FocalLoss
 from util.utils import make_weights_for_balanced_classes, get_val_data, separate_irse_bn_paras, separate_resnet_bn_paras, warm_up_lr, schedule_lr, perform_val, get_time, buffer_val, AverageMeter, accuracy
 
+from collections import OrderedDict
+import numpy as np
+import pandas as pd
+from PIL import Image
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import accuracy_score
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import os
 
 
-def get_top_k(output, topk=(5,)):
-    maxk = max(topk)
-    _, pred = output.topk(maxk, 1, True, True)
-    return pred
+class CustomDataset(torch.utils.data.Dataset):
+    """
+    Custom dataset.
+    """
+    def __init__(self, data_root, fold, mode, transform):
+        self.data_root = data_root
+        self.mode = mode
+        self.transform = transform
 
-def apk(actual, predicted, k=5):
-    actual = [int(actual)]
-    if len(predicted)>k:
-        predicted = predicted[:k]
+        # self.train_df = self._duplicate_low_shot_classes()
+        # self.all_folds = self._kfold_split()
+        # if self.mode == 'train':
+        #     self.imgs, self.labels, _, _ = self.all_folds[fold]
+        # elif self.mode == 'val':
+        #     _, _, self.imgs, self.labels = self.all_folds[fold]
+        self.train_df = pd.read_csv(os.path.join(self.data_root, "train.csv"))
+        self.imgs = self.train_df["image"].values
+        self.labels = self.train_df["label"].values
+        if self.mode == 'test':
+            self.test_df = pd.read_csv(os.path.join(self.data_root, "sample_submission.csv"))
+            self.imgs = self.test_df["image"].values
 
-    score = 0.0
-    num_hits = 0.0
+    # def _duplicate_low_shot_classes(self):
+    #     train_df = pd.read_csv(os.path.join(self.data_root, "train.csv"))
+    #     label = train_df['label'].values
+    #     classes, class_counts = np.unique(label, return_counts=True)
+    #     low_shot_classes = classes[class_counts == 1]
+    #     low_shot_classes = np.append(low_shot_classes, classes[class_counts == 2])
 
-    for i,p in enumerate(predicted):
-        if p in actual and p not in predicted[:i]:
-            num_hits += 1.0
-            score += num_hits / (i+1.0)
-
-    if not actual:
-        return 0.0
-
-    return score / min(len(actual), k)
-
-def mapk(actual, predicted, k=5):
-    _, predicted = predicted.topk(k, 1, True, True)
-    actual = actual.data.cpu().numpy()
-    predicted = predicted.data.cpu().numpy()
-    return np.mean([apk(a,p,k) for a,p in zip(actual, predicted)])
+    #     for cl in low_shot_classes:
+    #         single_class_df = train_df[train_df['label']==cl]
+    #         single_class_df = single_class_df.sample(n=1, random_state=8)
+    #         train_df = train_df.append([single_class_df], ignore_index=True)
+    #     return train_df
+    
+    # def _kfold_split(self):
+    #     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=8)
+    #     x, y = self.train_df['image'].values, self.train_df['label'].values
+    #     all_folds = {}
+    #     for i, (train_idx, val_idx) in enumerate(skf.split(x, y)):
+    #         x_train, y_train = x[train_idx], y[train_idx]
+    #         x_val, y_val = x[val_idx], y[val_idx]
+    #         all_folds[i] = (x_train, y_train, x_val, y_val)
+    #     return all_folds
+    
+    def __len__(self):
+        return len(self.imgs)
+    
+    def __getitem__(self, index):
+        img_file = self.imgs[index]
+        img_path = os.path.join(self.data_root, "face_align/train", img_file)
+        img = Image.open(img_path).convert("RGB")
+        if self.transform:
+            img = self.transform(img)
+        if self.mode == 'test':
+            return img, img_file
+        else:
+            label = self.labels[index]
+            return img, label
 
 
 if __name__ == '__main__':
@@ -89,37 +126,46 @@ if __name__ == '__main__':
     writer = SummaryWriter(LOG_ROOT) # writer for buffering intermedium results
 
     train_transform = transforms.Compose([ # refer to https://pytorch.org/docs/stable/torchvision/transforms.html for more build-in online data augmentation
-        # transforms.Resize([int(128 * INPUT_SIZE[0] / 112), int(128 * INPUT_SIZE[0] / 112)]), # smaller side resized
-        # transforms.RandomCrop([INPUT_SIZE[0], INPUT_SIZE[1]]),
+        transforms.Resize([int(128 * INPUT_SIZE[0] / 112), int(128 * INPUT_SIZE[0] / 112)]), # smaller side resized
+        transforms.RandomCrop([INPUT_SIZE[0], INPUT_SIZE[1]]),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean = RGB_MEAN,
                              std = RGB_STD),
     ])
-    val_transform = transfoms.Compose([
+    val_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean = RGB_MEAN,
                              std = RGB_STD),
     ])
+    test_transform = transforms.Compose([
+        transforms.Resize([int(128 * INPUT_SIZE[0] / 112), int(128 * INPUT_SIZE[0] / 112)]), # smaller side resized
+        transforms.TenCrop([INPUT_SIZE[0], INPUT_SIZE[1]]),
+        transforms.Lambda(lambda crops: torch.stack([
+            transforms.Compose([transforms.ToTensor(),
+                                transforms.Normalize(mean = RGB_MEAN,
+                                                     std = RGB_STD)])(crop) 
+            for crop in crops]))
+    ])
 
-    dataset_train = datasets.ImageFolder(os.path.join(DATA_ROOT, 'train'), train_transform)
-    dataset_val = datasets.ImageFolder(os.path.join(DATA_ROOT, "val"), val_transform)
-
-    # create a weighted random sampler to process imbalanced data
-    weights = make_weights_for_balanced_classes(dataset_train.imgs, len(dataset_train.classes))
-    weights = torch.DoubleTensor(weights)
-    sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(weights))
+    dataset_train = CustomDataset(DATA_ROOT, 0, "train", train_transform)
+    dataset_val = CustomDataset(DATA_ROOT, 0, "val", val_transform)
+    dataset_test = CustomDataset(DATA_ROOT, 0, "test", test_transform)
 
     train_loader = torch.utils.data.DataLoader(
-        dataset_train, batch_size = BATCH_SIZE, sampler = sampler, pin_memory = PIN_MEMORY,
-        num_workers = NUM_WORKERS, drop_last = DROP_LAST
+        dataset_train, batch_size = BATCH_SIZE, shuffle=True,
+        pin_memory = PIN_MEMORY, num_workers = NUM_WORKERS, drop_last = DROP_LAST
     )
     val_loader = torch.utils.data.DataLoader(
         dataset_val, batch_size = BATCH_SIZE, pin_memory = PIN_MEMORY,
         num_workers = NUM_WORKERS
     )
+    test_loader = torch.utils.data.DataLoader(
+        dataset_test, batch_size = BATCH_SIZE, pin_memory = PIN_MEMORY,
+        num_workers = NUM_WORKERS
+    )
 
-    NUM_CLASS = len(train_loader.dataset.classes)
+    NUM_CLASS = 1000
     print("Number of Training Classes: {}".format(NUM_CLASS))
 
     #======= model & loss & optimizer =======#
@@ -163,6 +209,13 @@ if __name__ == '__main__':
         backbone_paras_only_bn, backbone_paras_wo_bn = separate_resnet_bn_paras(BACKBONE) # separate batch_norm parameters from others; do not do weight decay for batch_norm parameters to improve the generalizability
         _, head_paras_wo_bn = separate_resnet_bn_paras(HEAD)
     OPTIMIZER = optim.SGD([{'params': backbone_paras_wo_bn + head_paras_wo_bn, 'weight_decay': WEIGHT_DECAY}, {'params': backbone_paras_only_bn}], lr = LR, momentum = MOMENTUM)
+    
+    output_layer_paras_only_bn, output_layer_paras_wo_bn = separate_irse_bn_paras(BACKBONE.output_layer)
+    OPTIMIZER = optim.SGD(
+        [{'params': output_layer_paras_wo_bn, 'weight_decay': WEIGHT_DECAY, 'lr': LR * 0.05},
+         {'params': output_layer_paras_only_bn, 'lr': LR * 0.05},
+         {'params': head_paras_wo_bn, 'weight_decay': WEIGHT_DECAY, 'lr': LR}],
+        lr = LR, momentum = MOMENTUM)
     print("=" * 60)
     print(OPTIMIZER)
     print("Optimizer Generated")
@@ -205,20 +258,17 @@ if __name__ == '__main__':
         if epoch == STAGES[2]:
             schedule_lr(OPTIMIZER)
 
-        # BACKBONE.train()  # set to training mode
-        
-        # for p in BACKBONE.input_layer.parameters():
+        # for p in BACKBONE.parameters():
         #     p.requires_grad = False
-        # for p in BACKBONE.body.parameters():
-        #     p.requires_grad = False
-        # BACKBONE.input_layer.eval()
-        # BACKBONE.body.eval()
-        # BACKBONE.output_layer.train()
+        # BACKBONE.eval()
 
-        for p in BACKBONE.parameters():
+        for p in BACKBONE.module.input_layer.parameters():
             p.requires_grad = False
-        BACKBONE.eval()
-        
+        for p in BACKBONE.module.body.parameters():
+            p.requires_grad = False
+        BACKBONE.module.input_layer.eval()
+        BACKBONE.module.body.eval()
+        BACKBONE.module.output_layer.train()
         HEAD.train()
 
         losses = AverageMeter()
@@ -289,11 +339,11 @@ if __name__ == '__main__':
                 outputs = HEAD(features, None)
                 predicted.append(outputs)
                 actual.append(labels)
-        actual = torch.cat(y_val, 0)
-        predicted = torch.cat(y_pred, 0)
-        map5 = mapk(y_val, y_pred)
-
-        print("Epoch {}/{}, Evaluation: mAP@5: {}".format(epoch + 1, NUM_EPOCH, map5))
+        actual = torch.cat(actual, 0)
+        predicted = torch.cat(predicted, 0)
+        val_acc = accuracy_score(actual.cpu().numpy(),
+            np.argmax(predicted.cpu().numpy(), 1))
+        print("Epoch {}/{}, Evaluation metric: {}".format(epoch + 1, NUM_EPOCH, val_acc))
         print("=" * 60)
 
         # save checkpoints per epoch
@@ -303,3 +353,25 @@ if __name__ == '__main__':
         else:
             torch.save(BACKBONE.state_dict(), os.path.join(MODEL_ROOT, "Backbone_{}_Epoch_{}_Batch_{}_Time_{}_checkpoint.pth".format(BACKBONE_NAME, epoch + 1, batch, get_time())))
             torch.save(HEAD.state_dict(), os.path.join(MODEL_ROOT, "Head_{}_Epoch_{}_Batch_{}_Time_{}_checkpoint.pth".format(HEAD_NAME, epoch + 1, batch, get_time())))
+    
+    # compute predictions on test set
+    print("=" * 60)
+    print("Compute predictions on test set")
+    BACKBONE.eval()
+    HEAD.eval()
+
+    img_files = []
+    preds = []
+    with torch.no_grad():
+        for inputs, index in tqdm(test_loader):    
+            bs, ncrops, c, h, w = inputs.size()
+            results = BACKBONE(inputs.view(-1, c, h, w)) # fuse batch size and ncrops
+            results = results.view(bs, ncrops, -1).mean(1) # avg over crops
+            img_files.append(index)
+            preds.append(results)
+    # Extract top 5 predictions
+    preds = torch.cat(preds, 0)
+    top_preds, _ = torch.topk(preds, k=5, dim=1).cpu().numpy()
+    submit_df = pd.concat([pd.Series(img_files), pd.Series(top_preds)], axis=1)
+    submit_df.columns = ["image", "label"]
+    submit_df.to_csv("retrain_backbone_output_layer.csv", index=False)
