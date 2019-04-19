@@ -39,8 +39,8 @@ configurations = {
         DATA_ROOT = './', # the parent root where your train/val/test data are stored
         MODEL_ROOT = 'src/checkpoint/', # the root to buffer your checkpoints
         LOG_ROOT = 'src/log/', # the root to log your train/val status
-        RESUME = 'src/checkpoint/se_resnext50_32x4d_ArcFace_epoch_1_iter_50.pth', # the path to resume training from a saved checkpoint
-        # RESUME = None,
+        # RESUME = 'src/checkpoint/se_resnext50_32x4d_ArcFace_epoch_1_iter_50.pth', # the path to resume training from a saved checkpoint
+        RESUME = None,
 
         BACKBONE_NAME = 'se_resnext50_32x4d', # support: [...]
         HEAD_NAME = 'ArcFace', # support:  ['Softmax', 'ArcFace', 'CosFace', 'SphereFace', 'Am_softmax']
@@ -65,14 +65,14 @@ configurations = {
         DISP_FREQ = 20,
         CHECKPOINT_PERIOD = 5000,
 
-        # LR = 5e-4, # initial LR
+        # LR = 5e-5, # initial LR
         # BATCH_SIZE = 16,
         # NUM_EPOCH = 12, # total epoch number
         # STAGES = [8, 10], # epoch stages to decay learning rate
         # WARMUP_ITERS = 500,
         # MILESTONES = [480000, 600000]
         
-        LR = 1e-3, # initial LR
+        LR = 1e-4, # initial LR
         BATCH_SIZE = 32,
         NUM_EPOCH = 6, # total epoch number
         STAGES = [4, 5], # epoch stages to decay learning rate
