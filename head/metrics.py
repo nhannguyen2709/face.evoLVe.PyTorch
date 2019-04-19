@@ -7,8 +7,6 @@ from torch.nn import Parameter
 import math
 
 
-# Support: ['Softmax', 'ArcFace', 'CosFace', 'SphereFace', 'Am_softmax']
-
 class Softmax(nn.Module):
     r"""Implement of Softmax (normal classification head):
         Args:
