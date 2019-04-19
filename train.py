@@ -88,11 +88,19 @@ if __name__ == '__main__':
         logger.info("Loading optimizer from checkpoint {}".format(
             cfg['RESUME']))
         optimizer.load_state_dict(checkpoint.pop("optimizer"))
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.cuda()
         logger.info("Loading scheduler from checkpoint {}".format(
             cfg['RESUME']))
-        scheduler.load_state_dict(checkpoint.pop("scheduler"))
+        scheduler.load_state_dict(checkpoint.pop("scheduler"))  
+        start_epoch = checkpoint['last_epoch'] - 1
+        start_iter = checkpoint['last_iter']
     else:
-        logger.info("No checkpoint found")
+        logger.info("No checkpoint found, start training from scratch")
+        start_epoch = 0
+        start_iter = 0
 
     if cfg['MULTI_GPU']:
         # multi-GPU setting
@@ -113,13 +121,13 @@ if __name__ == '__main__':
     
     #======= train & validation & save checkpoint =======#
     logger.info("Start training")
-    for epoch in range(cfg['NUM_EPOCH']): # start training process        
+    for epoch in range(start_epoch, cfg['NUM_EPOCH']): # start training process        
         model.train()  # set to training mode
         meters = MetricLogger(delimiter=" ") 
         max_iter = len(train_loader)
         end = time.time()
 
-        for iteration, (inputs, labels) in enumerate(train_loader):
+        for iteration, (inputs, labels) in enumerate(train_loader, start_iter):
             data_time = time.time() - end
             iteration = iteration + 1
             scheduler.step()
@@ -170,6 +178,8 @@ if __name__ == '__main__':
             # save checkpoints
             if iteration % cfg['CHECKPOINT_PERIOD'] == 0 and get_rank() == 0:
                 checkpoint = {
+                    'last_epoch': epoch + 1,
+                    'last_iter': iteration,
                     'state_dict': model.module.state_dict() if cfg['MULTI_GPU'] else model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
