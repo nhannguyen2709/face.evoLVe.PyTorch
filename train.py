@@ -90,7 +90,7 @@ if __name__ == '__main__':
         optimizer.load_state_dict(checkpoint.pop("optimizer"))
         logger.info("Loading scheduler from checkpoint {}".format(
             cfg['RESUME']))
-        scheduler.load_state_dict(checkpoint.pop("optimizer"))
+        scheduler.load_state_dict(checkpoint.pop("scheduler"))
     else:
         logger.info("No checkpoint found")
 
